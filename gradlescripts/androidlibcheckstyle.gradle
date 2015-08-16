@@ -1,0 +1,16 @@
+
+apply from: rootProject.file('gradle/checkstyle.gradle')
+
+android.libraryVariants.all { variant ->
+    def name = variant.buildType.name
+    def testDirName = "src/test${name.capitalize()}"
+
+    def checkstyle = project.tasks.create "checkstyle${name.capitalize()}", Checkstyle
+    checkstyle.dependsOn variant.javaCompile
+    checkstyle.source variant.javaCompile.source
+    checkstyle.source project.files(testDirName)
+    checkstyle.classpath = project.fileTree(variant.javaCompile.destinationDir)
+    checkstyle.exclude('**/BuildConfig.java')
+    checkstyle.exclude('**/R.java')
+    project.tasks.getByName("check").dependsOn checkstyle
+}
