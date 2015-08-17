@@ -10,7 +10,7 @@ import rx.observables.StringObservable;
 public class RxMain {
   public static void main(String[] args) throws Exception {
     RxIrc rxIrc = RxIrc.connect("irc.freenode.net", 6667);
-    final String channel = "#hijunk";
+    final String channel = "#junkhack";
     rxIrc.login("jjjb", channel).subscribe(new Subscriber<String>() {
       @Override public void onCompleted() {
         System.out.println("completed");

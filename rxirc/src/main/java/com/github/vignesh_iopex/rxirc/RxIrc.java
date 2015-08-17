@@ -56,6 +56,7 @@ public class RxIrc {
               } else if (incoming.toLowerCase().contains("privmsg")) {
                 //writeln("PRIVMSG " + channelName + " : Acknowledge message received");
               }
+              System.out.println("==> " + incoming);
               subscriber.onNext(incoming);
             } catch (IOException e) {
               subscriber.onError(e);

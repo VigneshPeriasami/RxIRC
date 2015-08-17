@@ -14,7 +14,7 @@ android {
     buildToolsVersion parent.ext.buildToolsVersion
 
     defaultConfig {
-        applicationId "com.github.vignesh_iopex.lwig"
+        applicationId "com.github.vignesh_iopex.ircapp"
         minSdkVersion parent.ext.minSdkVersion
         targetSdkVersion parent.ext.targetSdkVersion
         versionCode 1
@@ -30,6 +30,8 @@ android {
 
 dependencies {
     compile libraries.androidV7Support
+    compile project(':rxirc')
+    compile 'io.reactivex:rxandroid:1.0.1'
 }
 
 apply from: rootProject.file("gradlescripts/androidcheckstyle.gradle")

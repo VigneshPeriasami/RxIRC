@@ -1,3 +1,8 @@
 <resources>
-    <string name="app_name">LWiG</string>
+    <string name="app_name">Rx IRC</string>
+    <string name="lbl_sendmessage">Send message</string>
+    <string name="lbl_btnsend">Send</string>
+    <string name="hc_message">Some dummy message</string>
+    <string name="hnt_username">user name</string>
+    <string name="hnt_channelname">Channel Name</string>
 </resources>
