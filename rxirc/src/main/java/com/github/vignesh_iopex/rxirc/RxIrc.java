@@ -10,6 +10,8 @@ import java.net.Socket;
 
 import rx.Observable;
 import rx.Subscriber;
+import rx.Subscription;
+import rx.functions.Action1;
 import rx.functions.Func1;
 
 public class RxIrc {
@@ -52,14 +54,26 @@ public class RxIrc {
               if (incoming.toLowerCase().startsWith("ping ")) {
                 writeln("PONG " + incoming.substring(5));
               } else if (incoming.toLowerCase().contains("privmsg")) {
-                writeln("PRIVMSG " + channelName + " : Acknowledge message received");
+                //writeln("PRIVMSG " + channelName + " : Acknowledge message received");
               }
-              subscriber.onNext("From : " + incoming);
+              subscriber.onNext(incoming);
             } catch (IOException e) {
               subscriber.onError(e);
             }
           }
         });
+      }
+    });
+  }
+
+  public Subscription readOutgoingMessageFrom(Observable<String> inputReader) {
+    return inputReader.subscribe(new Action1<String>() {
+      @Override public void call(String s) {
+        try {
+          writeln(s);
+        } catch (Exception e) {
+          e.printStackTrace();
+        }
       }
     });
   }
