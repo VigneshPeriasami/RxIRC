@@ -16,7 +16,7 @@ public final class LineSeparator implements Observable.Operator<String, String> 
       }
 
       @Override public void onNext(String s) {
-        String[] lines = s.split("[/\n]");
+        String[] lines = s.split("\n");
         for (String line : lines) {
           subscriber.onNext(line);
         }

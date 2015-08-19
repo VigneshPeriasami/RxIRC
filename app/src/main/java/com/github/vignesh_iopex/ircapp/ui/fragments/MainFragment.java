@@ -1,13 +1,8 @@
 package com.github.vignesh_iopex.ircapp.ui.fragments;
 
-import android.content.ComponentName;
 import android.content.Context;
 import android.content.DialogInterface;
-import android.content.Intent;
-import android.content.ServiceConnection;
-import android.os.AsyncTask;
 import android.os.Bundle;
-import android.os.IBinder;
 import android.support.annotation.Nullable;
 import android.support.v4.app.Fragment;
 import android.support.v7.app.AlertDialog;
@@ -19,9 +14,9 @@ import android.view.inputmethod.InputMethodManager;
 import android.widget.ArrayAdapter;
 import android.widget.EditText;
 import android.widget.ListView;
+import android.widget.Toast;
 
 import com.github.vignesh_iopex.ircapp.R;
-import com.github.vignesh_iopex.ircapp.services.IrcClientService;
 import com.github.vignesh_iopex.rxirc.RxIrc;
 
 import java.util.ArrayList;
@@ -31,6 +26,7 @@ import rx.Observable;
 import rx.Subscriber;
 import rx.android.schedulers.AndroidSchedulers;
 import rx.functions.Func1;
+import rx.schedulers.Schedulers;
 import rx.subjects.PublishSubject;
 
 public class MainFragment extends Fragment {
@@ -55,14 +51,31 @@ public class MainFragment extends Fragment {
     }
   };
   private PublishSubject<String> pushMessage = PublishSubject.create();
+  private RxIrc rxIrc;
 
   @Nullable @Override public View onCreateView(
       LayoutInflater inflater, ViewGroup container, Bundle savedInstanceState) {
-    getActivity().getApplicationContext().bindService(new Intent(getActivity()
-            .getApplicationContext(),
-            IrcClientService.class),
-        serviceConnection, Context.BIND_AUTO_CREATE);
+    connectIrc();
     return inflater.inflate(R.layout.fragment_main, container, false);
+  }
+
+  private void connectIrc() {
+    rxIrc = RxIrc.using("irc.freenode.net", 6667);
+    rxIrc.connect().subscribeOn(Schedulers.io())
+        .observeOn(AndroidSchedulers.mainThread()).subscribe(new Subscriber<RxIrc>() {
+      @Override public void onCompleted() {
+        unsubscribe();
+      }
+
+      @Override public void onError(Throwable e) {
+        Toast.makeText(getActivity(), "Connection failed", Toast.LENGTH_LONG).show();
+        unsubscribe();
+      }
+
+      @Override public void onNext(RxIrc rxIrc) {
+        onIrcConnected(rxIrc);
+      }
+    });
   }
 
   public void hideKeyboard() {
@@ -95,11 +108,12 @@ public class MainFragment extends Fragment {
   }
 
   private void setChannelObservable(Observable<String> incoming) {
-    incoming.observeOn(AndroidSchedulers.mainThread()).subscribe(subscriber);
+    incoming.observeOn(AndroidSchedulers.mainThread()).subscribeOn(Schedulers.io())
+        .subscribe(subscriber);
   }
 
   private void onIrcConnected(final RxIrc rxIrc) {
-    final View dialogView = getActivity().getLayoutInflater().inflate(R.layout.dialog_login, null);
+    final View dialogView = LayoutInflater.from(getActivity()).inflate(R.layout.dialog_login, null);
     new AlertDialog.Builder(getActivity()).setView(dialogView)
         .setPositiveButton
             ("Login", new DialogInterface.OnClickListener() {
@@ -118,30 +132,5 @@ public class MainFragment extends Fragment {
                 hideKeyboard();
               }
             }).setCancelable(false).create().show();
-    // ask for login
-  }
-
-  private ServiceConnection serviceConnection = new ServiceConnection() {
-    @Override public void onServiceConnected(ComponentName componentName, IBinder iBinder) {
-      IrcClientService.IrcBinder ircBinder = ((IrcClientService.IrcBinder) iBinder);
-      new AsyncConnector().execute(ircBinder);
-    }
-
-    @Override public void onServiceDisconnected(ComponentName componentName) {
-
-    }
-  };
-
-  private class AsyncConnector extends AsyncTask<IrcClientService.IrcBinder, Void, RxIrc> {
-    @Override protected RxIrc doInBackground(IrcClientService.IrcBinder... ircBinders) {
-      return ircBinders[0].connectAndGetIrc();
-    }
-
-    @Override protected void onPostExecute(RxIrc rxIrc) {
-      super.onPostExecute(rxIrc);
-      if (rxIrc != null) {
-        onIrcConnected(rxIrc);
-      }
-    }
   }
 }

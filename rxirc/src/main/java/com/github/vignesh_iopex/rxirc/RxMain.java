@@ -4,7 +4,6 @@ import java.io.BufferedReader;
 import java.io.InputStreamReader;
 
 import rx.Subscriber;
-import rx.functions.Action1;
 import rx.functions.Func1;
 import rx.observables.StringObservable;
 import rx.schedulers.Schedulers;
@@ -25,18 +24,26 @@ public class RxMain {
 
       @Override public void onNext(RxIrc rxIrc) {
         System.out.println("Connected " + rxIrc.isConnected());
-        doAfterLogin(rxIrc, channel);
+        doAfterConnect(rxIrc, channel);
       }
     });
     System.out.println("Done");
-    StringObservable.from(new InputStreamReader(System.in)).subscribe(new Action1<String>() {
-      @Override public void call(String s) {
-        System.out.println("Yes still listening: " + s);
-      }
-    });
+    while (true) {
+      // keep it alive
+    }
   }
 
-  private static void doAfterLogin(RxIrc rxIrc, final String channel) {
+  private static void doAfterConnect(RxIrc rxIrc, final String channel) {
+
+    // incoming read and outgoing write should happen on different threads
+    rxIrc.subscribeOutgoingMessages(StringObservable
+        .from(new BufferedReader(new InputStreamReader(System.in)))
+        .map(new Func1<String, String>() {
+          @Override public String call(String s) {
+            return "PRIVMSG " + channel + " : " + s;
+          }
+        }).subscribeOn(Schedulers.io()));
+
     rxIrc.login("jjjb", channel).subscribe(new Subscriber<String>() {
       @Override public void onCompleted() {
         System.out.println("completed");
@@ -50,13 +57,5 @@ public class RxMain {
         System.out.println("=>" + s);
       }
     });
-
-    rxIrc.subscribeOutgoingMessages(StringObservable
-        .from(new BufferedReader(new InputStreamReader(System.in)))
-        .map(new Func1<String, String>() {
-          @Override public String call(String s) {
-            return "PRIVMSG " + channel + " : " + s;
-          }
-        }));
   }
 }

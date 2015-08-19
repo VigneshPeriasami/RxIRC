@@ -26,7 +26,7 @@ public class RxIrc {
   private final String host;
   private final int port;
 
-  private RxIrc(String host, int port) throws IOException {
+  private RxIrc(String host, int port) {
     this.host = host;
     this.port = port;
   }
@@ -53,7 +53,7 @@ public class RxIrc {
   /**
    * Just returns an instance of {@link RxIrc} call {@link #connect()} to connect
    */
-  public static RxIrc using(String host, int port) throws IOException {
+  public static RxIrc using(String host, int port) {
     return new RxIrc(host, port);
   }
 
