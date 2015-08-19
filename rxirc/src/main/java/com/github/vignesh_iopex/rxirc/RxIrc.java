@@ -1,40 +1,72 @@
 package com.github.vignesh_iopex.rxirc;
 
+import com.github.vignesh_iopex.rxirc.internal.operators.LineSeparator;
+import com.github.vignesh_iopex.rxirc.internal.operators.LoginOperator;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
-import java.net.InetSocketAddress;
 import java.net.Socket;
 
 import rx.Observable;
 import rx.Subscriber;
 import rx.Subscription;
+import rx.functions.Action0;
 import rx.functions.Action1;
 import rx.functions.Func1;
+import rx.observables.StringObservable;
 
 public class RxIrc {
   private BufferedReader reader;
   private BufferedWriter writer;
+  private Socket socket;
   private static final String NEWLINE = "\r\n";
+  private final String host;
+  private final int port;
 
-  private RxIrc(BufferedReader reader, BufferedWriter writer) throws IOException {
-    this.reader = reader;
-    this.writer = writer;
+  private RxIrc(String host, int port) throws IOException {
+    this.host = host;
+    this.port = port;
   }
 
-  public static RxIrc connect(String host, int port) throws IOException {
-    Socket socket = new Socket();
-    socket.connect(new InetSocketAddress(host, port));
-    BufferedWriter writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
-    BufferedReader reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-    return new RxIrc(reader, writer);
+  /**
+   * Involves network operation use {@link rx.Scheduler} if required
+   */
+  public Observable<RxIrc> connect() {
+    return Observable.create(new Observable.OnSubscribe<RxIrc>() {
+      @Override public void call(Subscriber<? super RxIrc> subscriber) {
+        try {
+          socket = new Socket(host, port);
+          reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
+          writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+          subscriber.onNext(RxIrc.this);
+          subscriber.onCompleted();
+        } catch (IOException e) {
+          subscriber.onError(e);
+        }
+      }
+    });
   }
 
-  public Observable<String> login(final String username, final String channelName) {
-    return Observable.create(new Observable.OnSubscribe<String>() {
-      @Override public void call(final Subscriber<? super String> subscriber) {
+  /**
+   * Just returns an instance of {@link RxIrc} call {@link #connect()} to connect
+   */
+  public static RxIrc using(String host, int port) throws IOException {
+    return new RxIrc(host, port);
+  }
+
+  /**
+   * @return if connection is alive
+   */
+  public boolean isConnected() {
+    return socket.isConnected();
+  }
+
+  private Action0 performLogin(final String username, final String channelName) {
+    return new Action0() {
+      @Override public void call() {
         String login = "NICK %s " + NEWLINE;
         login += "USER %s 8 * : RxIrc login" + NEWLINE;
         login += "JOIN %s" + NEWLINE;
@@ -42,21 +74,24 @@ public class RxIrc {
         try {
           writeln(login);
         } catch (Exception e) {
-          subscriber.onError(e);
+          throw new RuntimeException("Session closed");
         }
       }
-    }).lift(new ChannelOperator(reader)).flatMap(new Func1<String, Observable<String>>() {
+    };
+  }
+
+  /**
+   * @return flatmap this to keep the session alive
+   */
+  private Func1<String, Observable<String>> playPingPong() {
+    return new Func1<String, Observable<String>>() {
       @Override public Observable<String> call(final String incoming) {
         return Observable.create(new Observable.OnSubscribe<String>() {
-
           @Override public void call(Subscriber<? super String> subscriber) {
             try {
               if (incoming.toLowerCase().startsWith("ping ")) {
                 writeln("PONG " + incoming.substring(5));
-              } else if (incoming.toLowerCase().contains("privmsg")) {
-                //writeln("PRIVMSG " + channelName + " : Acknowledge message received");
               }
-              System.out.println("==> " + incoming);
               subscriber.onNext(incoming);
             } catch (IOException e) {
               subscriber.onError(e);
@@ -64,10 +99,31 @@ public class RxIrc {
           }
         });
       }
-    });
+    };
   }
 
-  public Subscription readOutgoingMessageFrom(Observable<String> inputReader) {
+  /**
+   * Performs login and raises the subscriber exception {@link Subscriber#onError(Throwable)} if
+   * login process is failed.
+   * <p>
+   * Note: This involves subscribing to incoming messages in same thread, subscribe using
+   * {@link rx.Scheduler} to avoid blocking
+   * <p>
+   * Tip: Can reuse the same {@link rx.Scheduler} if created when called from {@link #connect()}
+   * result
+   *
+   * @return Observable that listens to the incoming messages.
+   */
+  public Observable<String> login(final String username, final String channelName) {
+    return StringObservable.from(reader)
+        .doOnSubscribe(performLogin(username, channelName))
+        .lift(new LineSeparator()).lift(new LoginOperator())
+        // keep playing ping pong with the server to keep the session alive.
+        .flatMap(playPingPong());
+  }
+
+  // Don't know if this is a good approach to take an observable as input
+  public Subscription subscribeOutgoingMessages(Observable<String> inputReader) {
     return inputReader.subscribe(new Action1<String>() {
       @Override public void call(String s) {
         try {

@@ -20,7 +20,7 @@ public class IrcClientService extends Service {
 
   private RxIrc connect() {
     try {
-      return RxIrc.connect("irc.freenode.net", 6667);
+      return RxIrc.using("irc.freenode.net", 6667);
     } catch (IOException e) {
       e.printStackTrace();
       return null;

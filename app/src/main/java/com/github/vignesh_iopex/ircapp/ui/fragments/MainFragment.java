@@ -110,7 +110,7 @@ public class MainFragment extends Fragment {
                 Observable<String> observable = rxIrc.login(username.getText().toString(),
                     channelName);
                 setChannelObservable(observable);
-                rxIrc.readOutgoingMessageFrom(pushMessage.map(new Func1<String, String>() {
+                rxIrc.subscribeOutgoingMessages(pushMessage.map(new Func1<String, String>() {
                   @Override public String call(String s) {
                     return "PRIVMSG " + channelName + " : " + s;
                   }
