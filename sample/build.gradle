@@ -1,0 +1,7 @@
+apply plugin: 'java'
+
+dependencies {
+    compile project(':rxirc')
+}
+
+apply from: rootProject.file("gradlescripts/checkstyle.gradle")

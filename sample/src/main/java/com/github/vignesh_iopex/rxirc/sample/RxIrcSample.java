@@ -1,4 +1,6 @@
-package com.github.vignesh_iopex.rxirc;
+package com.github.vignesh_iopex.rxirc.sample;
+
+import com.github.vignesh_iopex.rxirc.RxIrc;
 
 import java.io.BufferedReader;
 import java.io.InputStreamReader;
@@ -8,7 +10,7 @@ import rx.functions.Func1;
 import rx.observables.StringObservable;
 import rx.schedulers.Schedulers;
 
-public class RxMain {
+public class RxIrcSample {
 
   public static void main(String[] args) throws Exception {
     RxIrc rxIrc = RxIrc.using("irc.freenode.net", 6667);

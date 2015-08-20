@@ -1,1 +1,1 @@
-include ':app', ':rxirc'
+include ':app', ':rxirc', ':sample'
