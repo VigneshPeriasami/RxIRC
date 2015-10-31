@@ -62,8 +62,8 @@ public class MainFragment extends Fragment {
   }
 
   private void connectIrc() {
-    rxIrc = RxIrc.using("irc.freenode.net", 6667);
-    rxIrc.connect().subscribeOn(Schedulers.io())
+    rxIrc = RxIrc.create();
+    rxIrc.connect("irc.freenode.net", 6667).subscribeOn(Schedulers.io())
         .observeOn(AndroidSchedulers.mainThread())
         .subscribe(new Subscriber<RxIrc>() {
           @Override public void onCompleted() {

@@ -13,22 +13,23 @@ import rx.schedulers.Schedulers;
 public class RxIrcSample {
 
   public static void main(String[] args) throws Exception {
-    RxIrc rxIrc = RxIrc.using("irc.freenode.net", 6667);
+    RxIrc rxIrc = RxIrc.create();
     final String channel = "#junkhack";
-    rxIrc.connect().subscribeOn(Schedulers.io()).subscribe(new Subscriber<RxIrc>() {
-      @Override public void onCompleted() {
-        System.out.println("Completed");
-      }
+    rxIrc.connect("irc.freenode.net", 6667).subscribeOn(Schedulers.io())
+        .subscribe(new Subscriber<RxIrc>() {
+          @Override public void onCompleted() {
+            System.out.println("Completed");
+          }
 
-      @Override public void onError(Throwable e) {
-        System.out.println(e);
-      }
+          @Override public void onError(Throwable e) {
+            System.out.println(e);
+          }
 
-      @Override public void onNext(RxIrc rxIrc) {
-        System.out.println("Connected " + rxIrc.isConnected());
-        doAfterConnect(rxIrc, channel);
-      }
-    });
+          @Override public void onNext(RxIrc rxIrc) {
+            System.out.println("Connected " + rxIrc.isConnected());
+            doAfterConnect(rxIrc, channel);
+          }
+        });
     System.out.println("Done");
     while (true) {
       // keep it alive

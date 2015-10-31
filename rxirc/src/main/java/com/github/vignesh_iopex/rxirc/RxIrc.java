@@ -3,12 +3,7 @@ package com.github.vignesh_iopex.rxirc;
 import com.github.vignesh_iopex.rxirc.internal.operators.LineSeparator;
 import com.github.vignesh_iopex.rxirc.internal.operators.LoginOperator;
 
-import java.io.BufferedReader;
-import java.io.BufferedWriter;
 import java.io.IOException;
-import java.io.InputStreamReader;
-import java.io.OutputStreamWriter;
-import java.net.Socket;
 
 import rx.Observable;
 import rx.Subscriber;
@@ -16,31 +11,24 @@ import rx.Subscription;
 import rx.functions.Action0;
 import rx.functions.Action1;
 import rx.functions.Func1;
-import rx.observables.StringObservable;
 
 public class RxIrc {
-  private BufferedReader reader;
-  private BufferedWriter writer;
-  private Socket socket;
   private static final String NEWLINE = "\r\n";
-  private final String host;
-  private final int port;
+  private IOAction ioAction;
 
-  private RxIrc(String host, int port) {
-    this.host = host;
-    this.port = port;
+  RxIrc(IOAction ioAction) {
+    this.ioAction = ioAction;
   }
 
-  /**
-   * Involves network operation use {@link rx.Scheduler} if required
-   */
-  public Observable<RxIrc> connect() {
+  public static RxIrc create() {
+    return new RxIrc(new IrcConnector());
+  }
+
+  public Observable<RxIrc> connect(final String host, final int port) {
     return Observable.create(new Observable.OnSubscribe<RxIrc>() {
       @Override public void call(Subscriber<? super RxIrc> subscriber) {
         try {
-          socket = new Socket(host, port);
-          reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
-          writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
+          ioAction.connect(host, port);
           subscriber.onNext(RxIrc.this);
           subscriber.onCompleted();
         } catch (IOException e) {
@@ -51,17 +39,10 @@ public class RxIrc {
   }
 
   /**
-   * Just returns an instance of {@link RxIrc} call {@link #connect()} to connect
-   */
-  public static RxIrc using(String host, int port) {
-    return new RxIrc(host, port);
-  }
-
-  /**
    * @return if connection is alive
    */
   public boolean isConnected() {
-    return socket.isConnected();
+    return ioAction.isConnected();
   }
 
   private Action0 performLogin(final String username, final String channelName) {
@@ -109,13 +90,14 @@ public class RxIrc {
    * Note: This involves subscribing to incoming messages in same thread, subscribe using
    * {@link rx.Scheduler} to avoid blocking
    * <p>
-   * Tip: Can reuse the same {@link rx.Scheduler} if created when called from {@link #connect()}
+   * Tip: Can reuse the same {@link rx.Scheduler} if created when
+   * called from {@link #connect(String, int)} )}
    * result
    *
    * @return Observable that listens to the incoming messages.
    */
   public Observable<String> login(final String username, final String channelName) {
-    return StringObservable.from(reader)
+    return ioAction.reader()
         .doOnSubscribe(performLogin(username, channelName))
         .lift(new LineSeparator()).lift(new LoginOperator())
         // keep playing ping pong with the server to keep the session alive.
@@ -136,7 +118,6 @@ public class RxIrc {
   }
 
   public void writeln(String message) throws IOException {
-    writer.write(message + NEWLINE);
-    writer.flush();
+    ioAction.write(message + NEWLINE);
   }
 }
