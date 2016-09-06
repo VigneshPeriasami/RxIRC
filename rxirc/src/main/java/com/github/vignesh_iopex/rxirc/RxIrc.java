@@ -12,6 +12,7 @@ import rx.functions.Action0;
 import rx.functions.Action1;
 import rx.functions.Func1;
 
+@Deprecated
 public class RxIrc {
   private static final String NEWLINE = "\r\n";
   private IOAction ioAction;

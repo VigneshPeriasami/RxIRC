@@ -16,6 +16,7 @@ final class IrcConnector implements IOAction {
   private BufferedReader reader;
 
   @Override public void connect(String host, int port) throws IOException {
+    // todo: limited retries?
     socket = new Socket(host, port);
     reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
     writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
