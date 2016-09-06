@@ -1,64 +1,84 @@
 package com.github.vignesh_iopex.rxirc.sample;
 
-import com.github.vignesh_iopex.rxirc.RxIrc;
+import com.github.vignesh_iopex.rxirc.RxIrc2;
 
-import java.io.BufferedReader;
 import java.io.InputStreamReader;
+import java.util.concurrent.CountDownLatch;
 
-import rx.Subscriber;
-import rx.functions.Func1;
+import rx.Observer;
 import rx.observables.StringObservable;
 import rx.schedulers.Schedulers;
+import rx.subjects.PublishSubject;
+import rx.subjects.Subject;
+
+import static com.github.vignesh_iopex.rxirc.IrcCommands.join;
+import static com.github.vignesh_iopex.rxirc.IrcCommands.login;
 
 public class RxIrcSample {
+  static final String IRC_HOST = "irc.freenode.net";
+  static final int IRC_PORT = 6667;
 
   public static void main(String[] args) throws Exception {
-    RxIrc rxIrc = RxIrc.create();
-    final String channel = "#junkhack";
-    rxIrc.connect("irc.freenode.net", 6667).subscribeOn(Schedulers.io())
-        .subscribe(new Subscriber<RxIrc>() {
-          @Override public void onCompleted() {
-            System.out.println("Completed");
-          }
+    CountDownLatch countDownLatch  = new CountDownLatch(1);
+    PublishSubject<String> outgoingPublisher = PublishSubject.create();
 
-          @Override public void onError(Throwable e) {
-            System.out.println(e);
-          }
-
-          @Override public void onNext(RxIrc rxIrc) {
-            System.out.println("Connected " + rxIrc.isConnected());
-            doAfterConnect(rxIrc, channel);
-          }
-        });
-    System.out.println("Done");
-    while (true) {
-      // keep it alive
-    }
-  }
-
-  private static void doAfterConnect(RxIrc rxIrc, final String channel) {
-
-    // incoming read and outgoing write should happen on different threads
-    rxIrc.subscribeOutgoingMessages(StringObservable
-        .from(new BufferedReader(new InputStreamReader(System.in)))
-        .map(new Func1<String, String>() {
-          @Override public String call(String s) {
-            return "PRIVMSG " + channel + " : " + s;
-          }
-        }).subscribeOn(Schedulers.io()));
-
-    rxIrc.login("jjjb", channel).subscribe(new Subscriber<String>() {
-      @Override public void onCompleted() {
-        System.out.println("completed");
+    RxIrc2.connect(IRC_HOST, IRC_PORT).subscribe(new Observer<RxIrc2>() {
+      @Override
+      public void onCompleted() {
+        log("RxIrc connect process completed");
       }
 
-      @Override public void onError(Throwable e) {
-        e.printStackTrace();
+      @Override
+      public void onError(Throwable e) {
+        log(e);
       }
 
-      @Override public void onNext(String s) {
-        System.out.println("=>" + s);
+      @Override
+      public void onNext(RxIrc2 rxIrc2) {
+        listenIncoming(rxIrc2);
+        listenOutgoing(rxIrc2, outgoingPublisher);
+        performLogin(outgoingPublisher, "bot_1", "#junkhack");
       }
     });
+    countDownLatch.await();
+  }
+
+  private static void listenOutgoing(RxIrc2 rxIrc2, Subject<String, String> outgoingPublisher) {
+    StringObservable.from(new InputStreamReader(System.in)).subscribeOn(Schedulers.io())
+        .lift(new RxIrc2.OutgoingMessageProcessor())
+        .subscribe(outgoingPublisher);
+    rxIrc2.outgoing(outgoingPublisher);
+  }
+
+  private static void performLogin(Observer<String> observer, String username, String channel) {
+    observer.onNext(login(username, username));
+    observer.onNext(join(channel));
+  }
+
+  private static void listenIncoming(RxIrc2 rxIrc2) {
+    rxIrc2.incoming().subscribeOn(Schedulers.io()).subscribe(new Observer<String>() {
+      @Override
+      public void onCompleted() {
+        log("Incoming listening is done");
+      }
+
+      @Override
+      public void onError(Throwable e) {
+        log(e);
+      }
+
+      @Override
+      public void onNext(String s) {
+        log(s);
+      }
+    });
+  }
+
+  static void log(String msg) {
+    System.out.println(msg);
+  }
+
+  static void log(Throwable e) {
+    e.printStackTrace();
   }
 }
