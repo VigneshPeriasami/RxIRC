@@ -7,30 +7,62 @@ import java.io.IOException;
 
 import rx.Observable;
 import rx.Subscriber;
-import rx.Subscription;
-import rx.functions.Action0;
 import rx.functions.Action1;
 import rx.functions.Func1;
 
-@Deprecated
+import static com.github.vignesh_iopex.rxirc.IrcCommands.commandify;
+import static com.github.vignesh_iopex.rxirc.IrcCommands.privmsg;
+
 public class RxIrc {
-  private static final String NEWLINE = "\r\n";
-  private IOAction ioAction;
+  static final String NEWLINE = "\r\n";
+  private final IOAction ioAction;
 
   RxIrc(IOAction ioAction) {
     this.ioAction = ioAction;
   }
 
-  public static RxIrc create() {
-    return new RxIrc(new IrcConnector());
+  public static RxIrc create(String host, int port) {
+    return new RxIrc(new IrcConnector(host, port));
   }
 
-  public Observable<RxIrc> connect(final String host, final int port) {
+  public static Observable<RxIrc> observeConnection(RxIrc rxIrc) {
+    return safeConnect(rxIrc.ioAction);
+  }
+
+  public static Observable<String> inputStream(RxIrc rxIrc) {
+    return safeConnect(rxIrc.ioAction).flatMap(new Func1<RxIrc, Observable<String>>() {
+      @Override
+      public Observable<String> call(RxIrc rxIrc) {
+        return rxIrc.incoming();
+      }
+    });
+  }
+
+  public static void outputStream(RxIrc rxIrc, Observable<String> outgoing) {
+    safeConnect(rxIrc.ioAction).subscribe(new Action1<RxIrc>() {
+      @Override
+      public void call(RxIrc rxIrc) {
+        rxIrc.outgoing(outgoing);
+      }
+    });
+  }
+
+  @Deprecated
+  public static Observable<RxIrc> safeConnect(String host, int port) {
+    return safeConnect(new IrcConnector(host, port));
+  }
+
+  static Observable<RxIrc> safeConnect(IOAction ioAction) {
     return Observable.create(new Observable.OnSubscribe<RxIrc>() {
-      @Override public void call(Subscriber<? super RxIrc> subscriber) {
+      @Override
+      public void call(Subscriber<? super RxIrc> subscriber) {
         try {
-          ioAction.connect(host, port);
-          subscriber.onNext(RxIrc.this);
+          subscriber.onStart();
+          ioAction.safeConnect();
+          if (subscriber.isUnsubscribed()) {
+            return;
+          }
+          subscriber.onNext(new RxIrc(ioAction));
           subscriber.onCompleted();
         } catch (IOException e) {
           subscriber.onError(e);
@@ -39,86 +71,113 @@ public class RxIrc {
     });
   }
 
-  /**
-   * @return if connection is alive
-   */
-  public boolean isConnected() {
-    return ioAction.isConnected();
-  }
+  private Observable.Operator<String, String> playPingPong() {
+    return new Observable.Operator<String, String>() {
+      @Override
+      public Subscriber<? super String> call(Subscriber<? super String> subscriber) {
+        return new Subscriber<String>() {
+          @Override
+          public void onCompleted() {
+            subscriber.onCompleted();
+          }
 
-  private Action0 performLogin(final String username, final String channelName) {
-    return new Action0() {
-      @Override public void call() {
-        String login = "NICK %s " + NEWLINE;
-        login += "USER %s 8 * : RxIrc login" + NEWLINE;
-        login += "JOIN %s" + NEWLINE;
-        login = String.format(login, username, username, channelName);
-        try {
-          writeln(login);
-        } catch (Exception e) {
-          throw new RuntimeException("Session closed");
-        }
+          @Override
+          public void onError(Throwable e) {
+            subscriber.onError(e);
+          }
+
+          @Override
+          public void onNext(String incoming) {
+            subscriber.onNext(incoming);
+            if (incoming.toLowerCase().startsWith("ping ")) {
+              try {
+                writeln("PONG " + incoming.substring(5));
+              } catch (IOException e) {
+                subscriber.onError(e);
+              }
+            }
+          }
+        };
       }
     };
   }
 
-  /**
-   * @return flatmap this to keep the session alive
-   */
-  private Func1<String, Observable<String>> playPingPong() {
-    return new Func1<String, Observable<String>>() {
-      @Override public Observable<String> call(final String incoming) {
-        return Observable.create(new Observable.OnSubscribe<String>() {
-          @Override public void call(Subscriber<? super String> subscriber) {
+  Observable<String> incoming() {
+    return ioAction.reader()
+        .lift(new LineSeparator())
+        .lift(new LoginOperator())
+        .lift(playPingPong());
+  }
+
+  Observable.Operator<String, String> writeOperator() {
+    return new Observable.Operator<String, String>() {
+      @Override
+      public Subscriber<? super String> call(Subscriber<? super String> subscriber) {
+        return new Subscriber<String>() {
+          @Override
+          public void onCompleted() {
+            subscriber.onCompleted();
+          }
+
+          @Override
+          public void onError(Throwable e) {
+            subscriber.onError(e);
+          }
+
+          @Override
+          public void onNext(String message) {
             try {
-              if (incoming.toLowerCase().startsWith("ping ")) {
-                writeln("PONG " + incoming.substring(5));
-              }
-              subscriber.onNext(incoming);
+              writeln(message);
+              subscriber.onNext(message);
             } catch (IOException e) {
               subscriber.onError(e);
             }
           }
-        });
+        };
       }
     };
   }
 
-  /**
-   * Performs login and raises the subscriber exception {@link Subscriber#onError(Throwable)} if
-   * login process is failed.
-   * <p>
-   * Note: This involves subscribing to incoming messages in same thread, subscribe using
-   * {@link rx.Scheduler} to avoid blocking
-   * <p>
-   * Tip: Can reuse the same {@link rx.Scheduler} if created when
-   * called from {@link #connect(String, int)} )}
-   * result
-   *
-   * @return Observable that listens to the incoming messages.
-   */
-  public Observable<String> login(final String username, final String channelName) {
-    return ioAction.reader()
-        .doOnSubscribe(performLogin(username, channelName))
-        .lift(new LineSeparator()).lift(new LoginOperator())
-        // keep playing ping pong with the server to keep the session alive.
-        .flatMap(playPingPong());
-  }
-
-  // Don't know if this is a good approach to take an observable as input
-  public Subscription subscribeOutgoingMessages(Observable<String> inputReader) {
-    return inputReader.subscribe(new Action1<String>() {
-      @Override public void call(String s) {
-        try {
-          writeln(s);
-        } catch (Exception e) {
-          e.printStackTrace();
-        }
-      }
-    });
-  }
-
-  public void writeln(String message) throws IOException {
+  void writeln(String message) throws IOException {
     ioAction.write(message + NEWLINE);
+  }
+
+  void outgoing(Observable<String> outgoingMessage) {
+    outgoingMessage.lift(writeOperator()).subscribe();
+  }
+
+  public static class OutgoingMessageProcessor implements Observable.Operator<String, String> {
+    private final String channelName;
+
+    public OutgoingMessageProcessor(String channelName) {
+      this.channelName = channelName;
+    }
+
+    @Override
+    public Subscriber<? super String> call(Subscriber<? super String> subscriber) {
+      return new Subscriber<String>() {
+        @Override
+        public void onCompleted() {
+          subscriber.onCompleted();
+        }
+
+        @Override
+        public void onError(Throwable e) {
+          subscriber.onError(e);
+        }
+
+        @Override
+        public void onNext(String message) {
+          if (message == null) {
+            return;
+          }
+          if (message.startsWith("/")) {
+            subscriber.onNext(commandify(message));
+          } else {
+            subscriber.onNext(privmsg(channelName, message));
+          }
+        }
+      };
+    }
   }
 }

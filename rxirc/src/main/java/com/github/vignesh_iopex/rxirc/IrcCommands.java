@@ -1,6 +1,6 @@
 package com.github.vignesh_iopex.rxirc;
 
-import static com.github.vignesh_iopex.rxirc.RxIrc2.NEWLINE;
+import static com.github.vignesh_iopex.rxirc.RxIrc.NEWLINE;
 
 public class IrcCommands {
   public static String login(String nickname, String username) {
@@ -13,8 +13,8 @@ public class IrcCommands {
     return String.format("JOIN %s" + NEWLINE, channelName);
   }
 
-  public static String privmsg(String message) {
-    return String.format("PRIVMSG %s" + NEWLINE, message);
+  public static String privmsg(String recipient, String message) {
+    return String.format("PRIVMSG %s :%s" + NEWLINE, recipient, message);
   }
 
   public static String commandify(String commandMessage) {

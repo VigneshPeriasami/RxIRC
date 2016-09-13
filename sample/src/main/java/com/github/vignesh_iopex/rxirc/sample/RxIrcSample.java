@@ -1,15 +1,17 @@
 package com.github.vignesh_iopex.rxirc.sample;
 
-import com.github.vignesh_iopex.rxirc.RxIrc2;
+import com.github.vignesh_iopex.rxirc.RxIrc;
 
 import java.io.InputStreamReader;
 import java.util.concurrent.CountDownLatch;
 
+import rx.Observable;
 import rx.Observer;
+import rx.Subscriber;
+import rx.functions.Action1;
 import rx.observables.StringObservable;
 import rx.schedulers.Schedulers;
 import rx.subjects.PublishSubject;
-import rx.subjects.Subject;
 
 import static com.github.vignesh_iopex.rxirc.IrcCommands.join;
 import static com.github.vignesh_iopex.rxirc.IrcCommands.login;
@@ -17,15 +19,17 @@ import static com.github.vignesh_iopex.rxirc.IrcCommands.login;
 public class RxIrcSample {
   static final String IRC_HOST = "irc.freenode.net";
   static final int IRC_PORT = 6667;
+  static final String CHANNEL_NAME = "#junkhack";
 
   public static void main(String[] args) throws Exception {
     CountDownLatch countDownLatch  = new CountDownLatch(1);
     PublishSubject<String> outgoingPublisher = PublishSubject.create();
 
-    RxIrc2.connect(IRC_HOST, IRC_PORT).subscribe(new Observer<RxIrc2>() {
+    RxIrc rxIrc = RxIrc.create(IRC_HOST, IRC_PORT);
+    RxIrc.inputStream(rxIrc).subscribeOn(Schedulers.io()).subscribe(new Subscriber<String>() {
       @Override
       public void onCompleted() {
-        log("RxIrc connect process completed");
+        log("incoming read completed");
       }
 
       @Override
@@ -34,44 +38,32 @@ public class RxIrcSample {
       }
 
       @Override
-      public void onNext(RxIrc2 rxIrc2) {
-        listenIncoming(rxIrc2);
-        listenOutgoing(rxIrc2, outgoingPublisher);
-        performLogin(outgoingPublisher, "bot_1", "#junkhack");
+      public void onNext(String msg) {
+        log(msg);
       }
     });
+
+    outgoingStream().subscribe(outgoingPublisher);
+    RxIrc.outputStream(rxIrc, outgoingPublisher);
+
+    RxIrc.observeConnection(rxIrc).subscribe(new Action1<RxIrc>() {
+      @Override
+      public void call(RxIrc rxIrc) {
+        performLogin(outgoingPublisher, "bot_1", CHANNEL_NAME);
+      }
+    });
+
     countDownLatch.await();
   }
 
-  private static void listenOutgoing(RxIrc2 rxIrc2, Subject<String, String> outgoingPublisher) {
-    StringObservable.from(new InputStreamReader(System.in)).subscribeOn(Schedulers.io())
-        .lift(new RxIrc2.OutgoingMessageProcessor())
-        .subscribe(outgoingPublisher);
-    rxIrc2.outgoing(outgoingPublisher);
+  private static Observable<String> outgoingStream() {
+    return StringObservable.from(new InputStreamReader(System.in)).subscribeOn(Schedulers.io())
+        .lift(new RxIrc.OutgoingMessageProcessor(CHANNEL_NAME));
   }
 
   private static void performLogin(Observer<String> observer, String username, String channel) {
     observer.onNext(login(username, username));
     observer.onNext(join(channel));
-  }
-
-  private static void listenIncoming(RxIrc2 rxIrc2) {
-    rxIrc2.incoming().subscribeOn(Schedulers.io()).subscribe(new Observer<String>() {
-      @Override
-      public void onCompleted() {
-        log("Incoming listening is done");
-      }
-
-      @Override
-      public void onError(Throwable e) {
-        log(e);
-      }
-
-      @Override
-      public void onNext(String s) {
-        log(s);
-      }
-    });
   }
 
   static void log(String msg) {

@@ -9,7 +9,7 @@ public interface IOAction {
    * Establishes socket connection
    * @throws IOException
    */
-  void connect(String host, int port) throws IOException;
+  void safeConnect() throws IOException;
 
   /**
    * @return creates plain new Observable from the socket input stream reader

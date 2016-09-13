@@ -5,7 +5,9 @@ import java.io.BufferedWriter;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
+import java.net.InetSocketAddress;
 import java.net.Socket;
+import java.net.SocketAddress;
 
 import rx.Observable;
 import rx.observables.StringObservable;
@@ -14,9 +16,18 @@ final class IrcConnector implements IOAction {
   private Socket socket;
   private BufferedWriter writer;
   private BufferedReader reader;
+  private String host;
+  private int port;
 
-  @Override public void connect(String host, int port) throws IOException {
-    // todo: limited retries?
+  public IrcConnector(String host, int port) {
+    this.host = host;
+    this.port = port;
+  }
+
+  @Override public void safeConnect() throws IOException {
+    if (isConnected()) {
+      return;
+    }
     socket = new Socket(host, port);
     reader = new BufferedReader(new InputStreamReader(socket.getInputStream()));
     writer = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream()));
